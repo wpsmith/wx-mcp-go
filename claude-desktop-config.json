@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "swagger-docs-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "--name", "swagger-mcp-server",
+        "--env-file", "/Users/travis.smith/Projects/sun/wx-mcp-go/.env",
+        "swagger-docs-mcp:latest"
+      ],
+      "cwd": "/Users/travis.smith/Projects/sun/wx-mcp-go",
+      "env": {
+        "DOCKER_HOST": "unix:///var/run/docker.sock"
+      }
+    }
+  }
+}

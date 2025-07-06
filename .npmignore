@@ -1,0 +1,69 @@
+# Source files (since we're publishing dist/)
+src/
+tsconfig.json
+
+# Development files
+*.test.js
+*.test.ts
+test/
+tests/
+__tests__/
+jest.config.*
+.eslintrc.*
+.prettierrc.*
+
+# Development dependencies and configs
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Documentation and examples that aren't needed in published package
+docs/
+examples/
+swagger_docs/
+memory-bank/
+debug-*.js
+test-*.js
+CLAUDE.md
+CONTRIBUTING.md
+PROMPT.md
+
+# Git and CI
+.git/
+.gitignore
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage reports
+coverage/
+.nyc_output/
+
+# Build artifacts that shouldn't be published
+node_modules/
+*.tsbuildinfo
+
+# Config files specific to development
+swagger-mcp.config.json

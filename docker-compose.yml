@@ -1,0 +1,59 @@
+# Docker Compose configuration for swagger-docs-mcp
+
+services:
+  swagger-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: swagger-docs-mcp:latest
+    container_name: swagger-mcp-server
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      # Package filtering
+      - WX_MCP_PACKAGE_ID=${WX_MCP_PACKAGE_ID:-}
+      
+      # API Configuration
+      - WX_MCP_API_KEY=${WX_MCP_API_KEY:-}
+      - WX_MCP_TIMEOUT=${WX_MCP_TIMEOUT:-30000}
+      - WX_MCP_MAX_TOOLS=${WX_MCP_MAX_TOOLS:-1000}
+      
+      # Logging
+      - WX_MCP_DEBUG=${WX_MCP_DEBUG:-false}
+      - WX_MCP_LOG_LEVEL=${WX_MCP_LOG_LEVEL:-info}
+      
+      # Swagger paths (default to container paths)
+      - WX_MCP_PATHS=${WX_MCP_PATHS:-/app/swagger_docs/v1,/app/swagger_docs/v2,/app/swagger_docs/v3}
+      
+      # TWC Filtering
+      - WX_MCP_TWC_DOMAIN=${WX_MCP_TWC_DOMAIN:-}
+      - WX_MCP_TWC_PORTFOLIO=${WX_MCP_TWC_PORTFOLIO:-}
+      - WX_MCP_TWC_GEOGRAPHY=${WX_MCP_TWC_GEOGRAPHY:-}
+      
+      # Advanced Configuration
+      - WX_MCP_VALIDATE_SWAGGER=${WX_MCP_VALIDATE_SWAGGER:-true}
+      - WX_MCP_SKIP_INVALID=${WX_MCP_SKIP_INVALID:-true}
+    volumes:
+      # Mount local swagger docs if needed (optional)
+      - ./swagger_docs:/app/swagger_docs:ro
+    networks:
+      - mcp-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "./swagger-docs-mcp", "--help"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  mcp-network:
+    driver: bridge

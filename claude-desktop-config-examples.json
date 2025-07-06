@@ -1,0 +1,239 @@
+{
+  "examples": {
+    "basic-docker": {
+      "description": "Basic Docker configuration using environment file",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "--env-file", "/path/to/wx-mcp-go/.env",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    },
+    
+    "docker-with-inline-env": {
+      "description": "Docker configuration with inline environment variables",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "--env", "WX_MCP_PACKAGE_ID=testing",
+              "--env", "WX_MCP_API_KEY=your-api-key-here",
+              "--env", "WX_MCP_DEBUG=true",
+              "--env", "WX_MCP_LOG_LEVEL=debug",
+              "--env", "WX_MCP_PATHS=/app/swagger_docs/v1,/app/swagger_docs/v2,/app/swagger_docs/v3",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    },
+    
+    "docker-compose": {
+      "description": "Docker Compose configuration",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker-compose",
+            "args": [
+              "-f", "/path/to/wx-mcp-go/docker-compose.yml",
+              "run",
+              "--rm",
+              "swagger-mcp-server"
+            ],
+            "cwd": "/path/to/wx-mcp-go",
+            "env": {
+              "WX_MCP_PACKAGE_ID": "testing",
+              "WX_MCP_API_KEY": "your-api-key-here",
+              "WX_MCP_DEBUG": "true"
+            }
+          }
+        }
+      }
+    },
+    
+    "docker-with-volume-mount": {
+      "description": "Docker configuration with custom swagger docs mounted",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "-v", "/path/to/custom/swagger_docs:/app/swagger_docs:ro",
+              "--env", "WX_MCP_PACKAGE_ID=testing",
+              "--env", "WX_MCP_API_KEY=your-api-key-here",
+              "--env", "WX_MCP_DEBUG=true",
+              "--env", "WX_MCP_PATHS=/app/swagger_docs",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    },
+    
+    "docker-production": {
+      "description": "Production Docker configuration with resource limits",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "--memory", "512m",
+              "--cpus", "0.5",
+              "--env-file", "/path/to/wx-mcp-go/.env",
+              "--health-cmd", "./swagger-docs-mcp --help",
+              "--health-interval", "30s",
+              "--health-timeout", "10s",
+              "--health-retries", "3",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go",
+            "env": {
+              "WX_MCP_DEBUG": "false",
+              "WX_MCP_LOG_LEVEL": "info"
+            }
+          }
+        }
+      }
+    },
+    
+    "docker-with-network": {
+      "description": "Docker configuration with custom network",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "--network", "mcp-network",
+              "--env-file", "/path/to/wx-mcp-go/.env",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    }
+  },
+  
+  "installation_instructions": {
+    "macos": {
+      "config_path": "~/Library/Application Support/Claude/claude_desktop_config.json",
+      "steps": [
+        "1. Build the Docker image: cd /path/to/wx-mcp-go && make docker-build",
+        "2. Copy one of the example configurations above",
+        "3. Replace '/path/to/wx-mcp-go' with your actual project path",
+        "4. Update environment variables as needed",
+        "5. Save the configuration to ~/Library/Application Support/Claude/claude_desktop_config.json",
+        "6. Restart Claude Desktop"
+      ]
+    },
+    "windows": {
+      "config_path": "%APPDATA%\\Claude\\claude_desktop_config.json",
+      "steps": [
+        "1. Build the Docker image: cd C:\\path\\to\\wx-mcp-go && make docker-build",
+        "2. Copy one of the example configurations above",
+        "3. Replace '/path/to/wx-mcp-go' with your actual project path (use Windows paths)",
+        "4. Update environment variables as needed",
+        "5. Save the configuration to %APPDATA%\\Claude\\claude_desktop_config.json",
+        "6. Restart Claude Desktop"
+      ]
+    },
+    "linux": {
+      "config_path": "~/.config/claude-desktop/claude_desktop_config.json",
+      "steps": [
+        "1. Build the Docker image: cd /path/to/wx-mcp-go && make docker-build",
+        "2. Copy one of the example configurations above",
+        "3. Replace '/path/to/wx-mcp-go' with your actual project path",
+        "4. Update environment variables as needed",
+        "5. Save the configuration to ~/.config/claude-desktop/claude_desktop_config.json",
+        "6. Restart Claude Desktop"
+      ]
+    }
+  },
+  
+  "troubleshooting": {
+    "common_issues": {
+      "docker_not_found": {
+        "error": "Command 'docker' not found",
+        "solution": "Install Docker Desktop and ensure it's running"
+      },
+      "image_not_found": {
+        "error": "Unable to find image 'swagger-docs-mcp:latest'",
+        "solution": "Build the image first: make docker-build"
+      },
+      "permission_denied": {
+        "error": "Permission denied while trying to connect to Docker daemon",
+        "solution": "Ensure Docker Desktop is running and your user has Docker permissions"
+      },
+      "container_exits": {
+        "error": "Container exits immediately",
+        "solution": "Check environment variables and ensure .env file exists with correct values"
+      },
+      "env_file_not_found": {
+        "error": "Environment file not found",
+        "solution": "Create .env file from .env.example and update values"
+      }
+    },
+    
+    "debugging": {
+      "enable_debug_logging": {
+        "description": "Add debug environment variable",
+        "config": "--env WX_MCP_DEBUG=true --env WX_MCP_LOG_LEVEL=debug"
+      },
+      "check_container_logs": {
+        "description": "View container logs",
+        "command": "docker logs swagger-mcp-server"
+      },
+      "test_container_manually": {
+        "description": "Test container outside Claude Desktop",
+        "command": "docker run --rm -it --env-file .env swagger-docs-mcp:latest --help"
+      }
+    }
+  },
+  
+  "environment_variables": {
+    "required": {
+      "WX_MCP_API_KEY": "Weather API key for authentication"
+    },
+    "optional": {
+      "WX_MCP_PACKAGE_ID": "Comma-separated list of package IDs to filter",
+      "WX_MCP_DEBUG": "Enable debug logging (true/false)",
+      "WX_MCP_LOG_LEVEL": "Log level (error, warn, info, debug)",
+      "WX_MCP_PATHS": "Comma-separated swagger document paths",
+      "WX_MCP_URLS": "Comma-separated swagger document URLs",
+      "WX_MCP_TIMEOUT": "Request timeout in milliseconds",
+      "WX_MCP_MAX_TOOLS": "Maximum number of tools to generate",
+      "WX_MCP_TWC_DOMAIN": "Filter by TWC domains",
+      "WX_MCP_TWC_PORTFOLIO": "Filter by TWC portfolios",
+      "WX_MCP_TWC_GEOGRAPHY": "Filter by TWC geographies"
+    }
+  }
+}
