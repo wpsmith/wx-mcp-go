@@ -12,6 +12,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 	"swagger-docs-mcp/pkg/types"
+	"swagger-docs-mcp/pkg/version"
 )
 
 // handleHealth handles health check requests
@@ -22,7 +23,7 @@ func (s *SSEServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := map[string]interface{}{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC(),
-		"version":   s.config.Version,
+		"version":   version.GetSemanticVersion(),
 		"tools":     s.toolRegistry.GetToolCount(),
 		"clients":   len(s.clients),
 	}
@@ -483,4 +484,23 @@ func containsInSlice(slice []string, searchTerm string) bool {
 		}
 	}
 	return false
+}
+
+// handleGetVersion handles version information requests
+func (s *SSEServer) handleGetVersion(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	
+	versionInfo := version.GetInfoWithoutBuildUser()
+	
+	response := map[string]interface{}{
+		"version":     versionInfo.Version,
+		"build_date":  versionInfo.BuildDate,
+		"commit_hash": versionInfo.CommitHash,
+		"go_version":  versionInfo.GoVersion,
+		"server_type": "SSE",
+		"timestamp":   time.Now().UTC(),
+	}
+	
+	json.NewEncoder(w).Encode(response)
 }

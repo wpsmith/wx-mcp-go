@@ -13,12 +13,22 @@ import (
 // ToolGenerator generates MCP tools from swagger documents
 type ToolGenerator struct {
 	logger *utils.Logger
+	config *types.ToolGenerationConfig
 }
 
 // NewToolGenerator creates a new tool generator
 func NewToolGenerator(logger *utils.Logger) *ToolGenerator {
 	return &ToolGenerator{
 		logger: logger.Child("generator"),
+		config: &types.ToolGenerationConfig{}, // Default empty config
+	}
+}
+
+// NewToolGeneratorWithConfig creates a new tool generator with configuration
+func NewToolGeneratorWithConfig(logger *utils.Logger, config *types.ToolGenerationConfig) *ToolGenerator {
+	return &ToolGenerator{
+		logger: logger.Child("generator"),
+		config: config,
 	}
 }
 
@@ -33,15 +43,59 @@ func (g *ToolGenerator) GenerateToolsFromDocument(document *types.SwaggerDocumen
 		return nil, fmt.Errorf("failed to extract endpoints: %w", err)
 	}
 
-	var tools []*types.GeneratedTool
+	// Filter endpoints by format preference first
+	var filteredEndpoints []types.SwaggerEndpoint
 	for _, endpoint := range endpoints {
 		// Skip deprecated endpoints if configured
-		if endpoint.Deprecated {
+		if g.config != nil && !g.config.IncludeDeprecated && endpoint.Deprecated {
 			g.logger.Debug("Skipping deprecated endpoint", zap.String("method", endpoint.Method), zap.String("path", endpoint.Path))
 			continue
 		}
 
-		tool, err := g.generateToolFromEndpoint(&endpoint, docInfo)
+		// Skip endpoints based on format filtering
+		if g.shouldSkipEndpointByFormat(&endpoint) {
+			continue
+		}
+
+		filteredEndpoints = append(filteredEndpoints, endpoint)
+	}
+
+	// Apply format preference logic - skip non-preferred formats if preference is set
+	if g.config != nil && g.config.PreferFormat != "" {
+		var preferredEndpoints []types.SwaggerEndpoint
+		preferredFormats := make(map[string]bool)
+		
+		// First pass: collect preferred format endpoints and track paths
+		for _, endpoint := range filteredEndpoints {
+			format := g.detectEndpointFormat(&endpoint)
+			basePath := g.getBasePathWithoutFormat(endpoint.Path)
+			baseMethod := endpoint.Method
+			key := fmt.Sprintf("%s:%s", baseMethod, basePath)
+			
+			if strings.EqualFold(format, g.config.PreferFormat) {
+				preferredEndpoints = append(preferredEndpoints, endpoint)
+				preferredFormats[key] = true
+			}
+		}
+		
+		// Second pass: add non-preferred endpoints only if no preferred format exists for that path
+		for _, endpoint := range filteredEndpoints {
+			format := g.detectEndpointFormat(&endpoint)
+			basePath := g.getBasePathWithoutFormat(endpoint.Path)
+			baseMethod := endpoint.Method
+			key := fmt.Sprintf("%s:%s", baseMethod, basePath)
+			
+			if !strings.EqualFold(format, g.config.PreferFormat) && !preferredFormats[key] {
+				preferredEndpoints = append(preferredEndpoints, endpoint)
+			}
+		}
+		
+		filteredEndpoints = preferredEndpoints
+	}
+
+	var tools []*types.GeneratedTool
+	for _, endpoint := range filteredEndpoints {
+		tool, err := g.generateToolFromEndpoint(&endpoint, docInfo, filteredEndpoints)
 		if err != nil {
 			g.logger.Error("Failed to generate tool for endpoint", zap.String("method", endpoint.Method), zap.String("path", endpoint.Path), zap.Error(err))
 			continue
@@ -55,9 +109,9 @@ func (g *ToolGenerator) GenerateToolsFromDocument(document *types.SwaggerDocumen
 }
 
 // generateToolFromEndpoint generates a single MCP tool from a swagger endpoint
-func (g *ToolGenerator) generateToolFromEndpoint(endpoint *types.SwaggerEndpoint, docInfo *types.SwaggerDocumentInfo) (*types.GeneratedTool, error) {
+func (g *ToolGenerator) generateToolFromEndpoint(endpoint *types.SwaggerEndpoint, docInfo *types.SwaggerDocumentInfo, allEndpoints []types.SwaggerEndpoint) (*types.GeneratedTool, error) {
 	// Generate tool name
-	toolName := g.generateToolName(endpoint, docInfo)
+	toolName := g.generateToolName(endpoint, docInfo, allEndpoints)
 
 	// Generate tool description
 	description := g.generateToolDescription(endpoint, docInfo)
@@ -80,7 +134,7 @@ func (g *ToolGenerator) generateToolFromEndpoint(endpoint *types.SwaggerEndpoint
 }
 
 // generateToolName generates a unique tool name for an endpoint (max 64 chars for MCP)
-func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInfo *types.SwaggerDocumentInfo) string {
+func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInfo *types.SwaggerDocumentInfo, allEndpoints []types.SwaggerEndpoint) string {
 	const maxToolNameLength = 64
 	
 	var baseName string
@@ -105,6 +159,17 @@ func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInf
 		baseName = g.generateCompactPathName(endpoint)
 	}
 
+	// Check if we should append format to the tool name
+	formatSuffix := ""
+	if g.shouldAppendFormatToToolName(endpoint, allEndpoints) {
+		format := g.detectEndpointFormat(endpoint)
+		formatSuffix = fmt.Sprintf("_%s", format)
+		g.logger.Debug("Appending format to tool name to avoid conflicts", 
+			zap.String("method", endpoint.Method),
+			zap.String("path", endpoint.Path),
+			zap.String("format", format))
+	}
+
 	// Add version suffix efficiently
 	versionSuffix := ""
 	if docInfo.Version != "" {
@@ -112,7 +177,7 @@ func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInf
 	}
 
 	// Calculate available space for base name
-	availableLength := maxToolNameLength - len(versionSuffix)
+	availableLength := maxToolNameLength - len(versionSuffix) - len(formatSuffix)
 	
 	// Truncate base name if needed to fit within limit
 	if len(baseName) > availableLength {
@@ -120,7 +185,7 @@ func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInf
 		baseName = g.abbreviateToolName(baseName, availableLength)
 	}
 
-	finalName := baseName + versionSuffix
+	finalName := baseName + formatSuffix + versionSuffix
 	
 	// Final safety check
 	if len(finalName) > maxToolNameLength {
@@ -251,6 +316,129 @@ func (g *ToolGenerator) abbreviateToolName(name string, maxLength int) string {
 	}
 	
 	return abbreviated
+}
+
+// detectEndpointFormat detects the format of an endpoint from its path
+func (g *ToolGenerator) detectEndpointFormat(endpoint *types.SwaggerEndpoint) string {
+	path := strings.ToLower(endpoint.Path)
+	
+	// Check for format in path extension
+	if strings.HasSuffix(path, ".json") {
+		return "json"
+	} else if strings.HasSuffix(path, ".xml") {
+		return "xml"
+	} else if strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml") {
+		return "yaml"
+	}
+	
+	// Check for format in query parameters or path segments
+	if strings.Contains(path, "json") {
+		return "json"
+	} else if strings.Contains(path, "xml") {
+		return "xml"
+	} else if strings.Contains(path, "yaml") || strings.Contains(path, "yml") {
+		return "yaml"
+	}
+	
+	// Check response content types if available
+	if endpoint.Responses != nil {
+		for _, responseInterface := range endpoint.Responses {
+			if responseMap, ok := responseInterface.(map[string]interface{}); ok {
+				if content, ok := responseMap["content"].(map[string]interface{}); ok {
+					for contentType := range content {
+						contentTypeLower := strings.ToLower(contentType)
+						if strings.Contains(contentTypeLower, "json") {
+							return "json"
+						} else if strings.Contains(contentTypeLower, "xml") {
+							return "xml"
+						} else if strings.Contains(contentTypeLower, "yaml") {
+							return "yaml"
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	// Default to json if no format detected
+	return "json"
+}
+
+// shouldSkipEndpointByFormat checks if an endpoint should be skipped based on format filtering
+func (g *ToolGenerator) shouldSkipEndpointByFormat(endpoint *types.SwaggerEndpoint) bool {
+	if g.config == nil {
+		return false
+	}
+	
+	format := g.detectEndpointFormat(endpoint)
+	
+	// Check if format should be ignored
+	for _, ignoredFormat := range g.config.IgnoreFormats {
+		if strings.EqualFold(format, ignoredFormat) {
+			g.logger.Debug("Skipping endpoint due to ignored format", 
+				zap.String("method", endpoint.Method), 
+				zap.String("path", endpoint.Path),
+				zap.String("format", format))
+			return true
+		}
+	}
+	
+	return false
+}
+
+// shouldAppendFormatToToolName checks if format should be appended to tool name
+func (g *ToolGenerator) shouldAppendFormatToToolName(endpoint *types.SwaggerEndpoint, endpoints []types.SwaggerEndpoint) bool {
+	if g.config == nil {
+		return false
+	}
+	
+	// If there's a preferred format and this endpoint matches it, don't append format
+	if g.config.PreferFormat != "" {
+		currentFormat := g.detectEndpointFormat(endpoint)
+		if strings.EqualFold(currentFormat, g.config.PreferFormat) {
+			return false
+		}
+	}
+	
+	// Check if there are multiple endpoints with the same base path but different formats
+	basePath := g.getBasePathWithoutFormat(endpoint.Path)
+	baseMethod := endpoint.Method
+	
+	var foundFormats []string
+	for _, ep := range endpoints {
+		if ep.Method == baseMethod && g.getBasePathWithoutFormat(ep.Path) == basePath {
+			format := g.detectEndpointFormat(&ep)
+			foundFormats = append(foundFormats, format)
+		}
+	}
+	
+	// Remove duplicates
+	uniqueFormats := make(map[string]bool)
+	for _, format := range foundFormats {
+		uniqueFormats[format] = true
+	}
+	
+	// If there are multiple unique formats, append format unless there's a preference
+	if len(uniqueFormats) > 1 {
+		if g.config.PreferFormat != "" {
+			// Only append format if it's not the preferred format
+			currentFormat := g.detectEndpointFormat(endpoint)
+			return !strings.EqualFold(currentFormat, g.config.PreferFormat)
+		}
+		return true
+	}
+	
+	return false
+}
+
+// getBasePathWithoutFormat removes format extensions from the path
+func (g *ToolGenerator) getBasePathWithoutFormat(path string) string {
+	// Remove common format extensions
+	basePath := strings.TrimSuffix(path, ".json")
+	basePath = strings.TrimSuffix(basePath, ".xml")
+	basePath = strings.TrimSuffix(basePath, ".yaml")
+	basePath = strings.TrimSuffix(basePath, ".yml")
+	return basePath
 }
 
 // shouldAddDocumentSuffix determines if we should add a document suffix to avoid conflicts

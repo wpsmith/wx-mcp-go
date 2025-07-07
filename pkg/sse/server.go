@@ -73,7 +73,7 @@ type ErrorEvent struct {
 func NewSSEServer(config *types.ResolvedConfig, logger *utils.Logger) *SSEServer {
 	scanner := swagger.NewScanner(logger)
 	parser := swagger.NewParser(logger)
-	generator := swagger.NewToolGenerator(logger)
+	generator := swagger.NewToolGeneratorWithConfig(logger, &config.ToolGeneration)
 	toolRegistry := server.NewToolRegistry()
 	httpClient := httpclient.NewClient(config, logger)
 
@@ -192,6 +192,9 @@ func (s *SSEServer) setupRoutes(router *mux.Router) {
 	
 	// Configuration
 	router.HandleFunc("/config", s.handleGetConfig).Methods("GET")
+	
+	// Version information
+	router.HandleFunc("/version", s.handleGetVersion).Methods("GET")
 }
 
 // addMiddleware adds middleware to the router

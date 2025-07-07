@@ -36,7 +36,7 @@ type MCPServer struct {
 func NewMCPServer(config *types.ResolvedConfig, logger *utils.Logger) *MCPServer {
 	scanner := swagger.NewScanner(logger)
 	parser := swagger.NewParser(logger)
-	generator := swagger.NewToolGenerator(logger)
+	generator := swagger.NewToolGeneratorWithConfig(logger, &config.ToolGeneration)
 	toolRegistry := NewToolRegistry()
 	httpClient := http.NewClient(config, logger)
 

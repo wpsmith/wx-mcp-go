@@ -49,10 +49,12 @@ type LoggingConfig struct {
 
 // ToolGenerationConfig represents tool generation configuration
 type ToolGenerationConfig struct {
-	IncludeDeprecated    bool   `mapstructure:"include_deprecated" yaml:"includeDeprecated" json:"includeDeprecated"`
-	MaxDescriptionLength int    `mapstructure:"max_description_length" yaml:"maxDescriptionLength" json:"maxDescriptionLength"`
-	UseOperationID       bool   `mapstructure:"use_operation_id" yaml:"useOperationId" json:"useOperationId"`
-	TagPrefix            string `mapstructure:"tag_prefix" yaml:"tagPrefix" json:"tagPrefix"`
+	IncludeDeprecated    bool     `mapstructure:"include_deprecated" yaml:"includeDeprecated" json:"includeDeprecated"`
+	MaxDescriptionLength int      `mapstructure:"max_description_length" yaml:"maxDescriptionLength" json:"maxDescriptionLength"`
+	UseOperationID       bool     `mapstructure:"use_operation_id" yaml:"useOperationId" json:"useOperationId"`
+	TagPrefix            string   `mapstructure:"tag_prefix" yaml:"tagPrefix" json:"tagPrefix"`
+	IgnoreFormats        []string `mapstructure:"ignore_formats" yaml:"ignoreFormats" json:"ignoreFormats"`
+	PreferFormat         string   `mapstructure:"prefer_format" yaml:"preferFormat" json:"preferFormat"`
 }
 
 // SwaggerProcessingConfig represents swagger processing configuration

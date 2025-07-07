@@ -77,21 +77,59 @@ create_ecr_repo() {
 build_and_push() {
     log "Building and pushing Docker image..."
     
+    # Get build information
+    MAJOR=1
+    MINOR=0
+    PATCH=0
+    PRERELEASE=""
+    COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+    VERSION="${MAJOR}.${COMMIT_COUNT}.${PATCH}"
+    if [ -n "$PRERELEASE" ]; then
+        VERSION="${VERSION}-${PRERELEASE}"
+    fi
+    BUILD_TIME=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    COMMIT_HASH=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    BUILD_USER=$(whoami 2>/dev/null || echo "aws-deploy")
+    
+    log "Build information:"
+    log "  Version: $VERSION"
+    log "  Build Time: $BUILD_TIME"  
+    log "  Commit Hash: $COMMIT_HASH"
+    log "  Build User: $BUILD_USER"
+    
     ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
     ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPO}"
     
     # Login to ECR
     aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ECR_URI}
     
-    # Build image for linux/amd64 platform (required for ECS Fargate)
+    # Build image for linux/amd64 platform (required for ECS Fargate) with version information
     cd "$(dirname "$0")/.."
-    docker build --platform linux/amd64 -t ${ECR_REPO}:latest .
+    docker build \
+        --platform linux/amd64 \
+        --build-arg MAJOR="$MAJOR" \
+        --build-arg MINOR="$COMMIT_COUNT" \
+        --build-arg PATCH="$PATCH" \
+        --build-arg PRERELEASE="$PRERELEASE" \
+        --build-arg COMMIT_COUNT="$COMMIT_COUNT" \
+        --build-arg BUILD_TIME="$BUILD_TIME" \
+        --build-arg COMMIT_HASH="$COMMIT_HASH" \
+        --build-arg BUILD_USER="$BUILD_USER" \
+        -t ${ECR_REPO}:latest \
+        -t ${ECR_REPO}:${VERSION} \
+        .
+    
+    # Tag for ECR
     docker tag ${ECR_REPO}:latest ${ECR_URI}:latest
+    docker tag ${ECR_REPO}:${VERSION} ${ECR_URI}:${VERSION}
     
     # Push image
     docker push ${ECR_URI}:latest
+    docker push ${ECR_URI}:${VERSION}
     
-    log "Image pushed: ${ECR_URI}:latest"
+    log "Images pushed:"
+    log "  ${ECR_URI}:latest"
+    log "  ${ECR_URI}:${VERSION}"
 }
 
 # Deploy CloudFormation stack
