@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swagger Docs SSE Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .event {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .tool-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: white;
+        }
+        .tool-card h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        .tool-card p {
+            margin: 0 0 10px 0;
+            color: #666;
+            font-size: 14px;
+        }
+        .execute-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .execute-btn:hover {
+            background: #0056b3;
+        }
+        .events-log {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Swagger Docs SSE Client</h1>
+        
+        <div id="status" class="status disconnected">
+            Disconnected
+        </div>
+
+        <div>
+            <h2>Configuration</h2>
+            <div id="config-info">Loading...</div>
+        </div>
+
+        <div>
+            <h2>Available Tools</h2>
+            <div id="tools-container" class="tools-grid">
+                Loading tools...
+            </div>
+        </div>
+
+        <div>
+            <h2>Events Log</h2>
+            <div id="events-log" class="events-log">
+                <div class="event">Connecting to SSE server...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const serverUrl = window.location.origin || 'http://localhost:8080';
+        let eventSource = null;
+        let tools = [];
+
+        function updateStatus(connected, message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+            statusEl.textContent = message;
+        }
+
+        function addEvent(type, data) {
+            const eventsLog = document.getElementById('events-log');
+            const eventEl = document.createElement('div');
+            eventEl.className = 'event';
+            eventEl.innerHTML = `
+                <strong>${type}</strong> at ${new Date().toLocaleTimeString()}<br>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            eventsLog.appendChild(eventEl);
+            eventsLog.scrollTop = eventsLog.scrollHeight;
+        }
+
+        function renderTools() {
+            const container = document.getElementById('tools-container');
+            if (tools.length === 0) {
+                container.innerHTML = '<p>No tools available</p>';
+                return;
+            }
+
+            container.innerHTML = tools.map(tool => `
+                <div class="tool-card">
+                    <h3>${tool.name}</h3>
+                    <p>${tool.description || 'No description available'}</p>
+                    <button class="execute-btn" onclick="executeTool('${tool.name}')">
+                        Execute Tool
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        async function executeTool(toolName) {
+            try {
+                const response = await fetch(`${serverUrl}/tools/${toolName}/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        arguments: {}
+                    })
+                });
+
+                const result = await response.json();
+                addEvent('Tool Execution Result', { tool: toolName, result });
+            } catch (error) {
+                addEvent('Tool Execution Error', { tool: toolName, error: error.message });
+            }
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch(`${serverUrl}/config`);
+                const config = await response.json();
+                document.getElementById('config-info').innerHTML = `
+                    <p><strong>Name:</strong> ${config.name}</p>
+                    <p><strong>Version:</strong> ${config.version}</p>
+                    <p><strong>Tools:</strong> ${config.toolCount}</p>
+                    <p><strong>Clients:</strong> ${config.clientCount}</p>
+                    <p><strong>Port:</strong> ${config.server.port}</p>
+                `;
+            } catch (error) {
+                document.getElementById('config-info').innerHTML = `Error loading config: ${error.message}`;
+            }
+        }
+
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource(`${serverUrl}/events`);
+
+            eventSource.onopen = function() {
+                updateStatus(true, 'Connected to SSE server');
+                addEvent('Connection', { status: 'connected' });
+            };
+
+            eventSource.onerror = function(error) {
+                updateStatus(false, 'Connection error');
+                addEvent('Connection Error', { error: error.type });
+            };
+
+            eventSource.addEventListener('connected', function(event) {
+                const data = JSON.parse(event.data);
+                addEvent('Connected', data);
+            });
+
+            eventSource.addEventListener('tools', function(event) {
+                const data = JSON.parse(event.data);
+                tools = data.tools;
+                renderTools();
+                addEvent('Tools Updated', { count: tools.length });
+            });
+
+            eventSource.addEventListener('tool_execution', function(event) {
+                const data = JSON.parse(event.data);
+                addEvent('Tool Executed', data);
+            });
+
+            eventSource.addEventListener('heartbeat', function(event) {
+                const data = JSON.parse(event.data);
+                // Don't log heartbeats to avoid spam
+            });
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadConfig();
+            connectSSE();
+        });
+
+        // Handle page unload
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>
