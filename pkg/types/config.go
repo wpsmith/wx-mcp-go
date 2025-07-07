@@ -22,6 +22,7 @@ type CLIOptions struct {
 
 // ServerConfig represents server configuration
 type ServerConfig struct {
+	Port     int           `mapstructure:"port" yaml:"port" json:"port"`
 	Timeout  time.Duration `mapstructure:"timeout" yaml:"timeout" json:"timeout"`
 	MaxTools int           `mapstructure:"max_tools" yaml:"maxTools" json:"maxTools"`
 }
@@ -132,6 +133,7 @@ func DefaultConfig() *ResolvedConfig {
 		Version:      "1.0.0",
 		SwaggerPaths: []string{},
 		Server: ServerConfig{
+			Port:     8080,
 			Timeout:  30 * time.Second,
 			MaxTools: 1000,
 		},

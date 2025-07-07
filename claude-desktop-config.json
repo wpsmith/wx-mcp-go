@@ -1,18 +1,41 @@
 {
   "mcpServers": {
-    "swagger-docs-mcp": {
-      "command": "docker",
+    "swagger-docs-mcp-local": {
+      "command": "/Users/travis.smith/Projects/sun/wx-mcp-go/swagger-docs-mcp",
       "args": [
-        "run",
-        "--rm",
-        "-i",
-        "--name", "swagger-mcp-server",
-        "--env-file", "/Users/travis.smith/Projects/sun/wx-mcp-go/.env",
-        "swagger-docs-mcp:latest"
+        "--swagger-url", "https://wx-swagger-docs.s3.us-east-2.amazonaws.com/raw-urls.json",
+        "--api-key", "your-api-key-here",
+        "--debug"
       ],
-      "cwd": "/Users/travis.smith/Projects/sun/wx-mcp-go",
+      "cwd": "/Users/travis.smith/Projects/sun/wx-mcp-go"
+    },
+    "swagger-docs-mcp-aws-alb": {
+      "command": "node",
+      "args": [
+        "/Users/travis.smith/Projects/sun/wx-mcp-go/examples/mcp-proxy.js",
+        "http://swagger-docs-mcp-alb-123456789.us-east-1.elb.amazonaws.com"
+      ],
+      "cwd": "/Users/travis.smith/Projects/sun/wx-mcp-go"
+    },
+    "swagger-docs-mcp-aws-ssm": {
+      "command": "node",
+      "args": [
+        "/Users/travis.smith/Projects/sun/wx-mcp-go/aws/ssm-tunnel-proxy.js",
+        "i-1234567890abcdef0",
+        "us-east-1"
+      ],
+      "cwd": "/Users/travis.smith/Projects/sun/wx-mcp-go"
+    },
+    "swagger-docs-mcp-aws-lambda": {
+      "command": "aws",
+      "args": [
+        "lambda", "invoke",
+        "--function-name", "swagger-docs-mcp-proxy",
+        "--payload", "file:///dev/stdin",
+        "/dev/stdout"
+      ],
       "env": {
-        "DOCKER_HOST": "unix:///var/run/docker.sock"
+        "AWS_REGION": "us-east-1"
       }
     }
   }

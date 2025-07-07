@@ -79,48 +79,178 @@ func (g *ToolGenerator) generateToolFromEndpoint(endpoint *types.SwaggerEndpoint
 	return tool, nil
 }
 
-// generateToolName generates a unique tool name for an endpoint
+// generateToolName generates a unique tool name for an endpoint (max 64 chars for MCP)
 func (g *ToolGenerator) generateToolName(endpoint *types.SwaggerEndpoint, docInfo *types.SwaggerDocumentInfo) string {
+	const maxToolNameLength = 64
+	
 	var baseName string
 
-	// Use operation ID if available
+	// First check for x-mcp-tool-name and validate length
+	if endpoint.MCPToolName != "" {
+		toolName := strings.TrimSpace(endpoint.MCPToolName)
+		if len(toolName) <= maxToolNameLength {
+			return toolName
+		}
+		// If too long, log warning and fall back to generation
+		g.logger.Warn("x-mcp-tool-name exceeds 64 characters, falling back to generated name", 
+			zap.String("toolName", toolName), 
+			zap.Int("length", len(toolName)))
+	}
+
+	// Use operation ID if available and not too long
 	if endpoint.OperationID != "" {
 		baseName = g.sanitizeToolName(endpoint.OperationID)
 	} else {
-		// Generate from path and method
-		pathParts := strings.Split(strings.Trim(endpoint.Path, "/"), "/")
-		var cleanParts []string
+		// Generate from path and method with length constraints
+		baseName = g.generateCompactPathName(endpoint)
+	}
 
-		for _, part := range pathParts {
-			// Remove parameter placeholders
-			if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
-				paramName := strings.Trim(part, "{}")
-				cleanParts = append(cleanParts, paramName)
-			} else {
-				cleanParts = append(cleanParts, part)
+	// Add version suffix efficiently
+	versionSuffix := ""
+	if docInfo.Version != "" {
+		versionSuffix = fmt.Sprintf("_v%s", docInfo.Version)
+	}
+
+	// Calculate available space for base name
+	availableLength := maxToolNameLength - len(versionSuffix)
+	
+	// Truncate base name if needed to fit within limit
+	if len(baseName) > availableLength {
+		// Try to preserve meaningful parts by abbreviating
+		baseName = g.abbreviateToolName(baseName, availableLength)
+	}
+
+	finalName := baseName + versionSuffix
+	
+	// Final safety check
+	if len(finalName) > maxToolNameLength {
+		finalName = finalName[:maxToolNameLength-3] + "..." // Emergency truncation
+		finalName = strings.TrimSuffix(finalName, "_") // Clean up trailing underscore
+	}
+
+	return finalName
+}
+
+// generateCompactPathName generates a compact name from endpoint path and method
+func (g *ToolGenerator) generateCompactPathName(endpoint *types.SwaggerEndpoint) string {
+	pathParts := strings.Split(strings.Trim(endpoint.Path, "/"), "/")
+	var cleanParts []string
+
+	for _, part := range pathParts {
+		// Handle parameter placeholders
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			paramName := strings.Trim(part, "{}")
+			// Abbreviate common parameter names
+			switch paramName {
+			case "locationId":
+				cleanParts = append(cleanParts, "loc")
+			case "latitude":
+				cleanParts = append(cleanParts, "lat")
+			case "longitude":
+				cleanParts = append(cleanParts, "lon")
+			case "geocode":
+				cleanParts = append(cleanParts, "geo")
+			default:
+				if len(paramName) > 6 {
+					cleanParts = append(cleanParts, paramName[:6])
+				} else {
+					cleanParts = append(cleanParts, paramName)
+				}
+			}
+		} else {
+			// Abbreviate common path parts
+			abbreviated := g.abbreviatePathPart(part)
+			if abbreviated != "" {
+				cleanParts = append(cleanParts, abbreviated)
 			}
 		}
-
-		pathStr := strings.Join(cleanParts, "_")
-		method := strings.ToLower(endpoint.Method)
-		baseName = g.sanitizeToolName(fmt.Sprintf("%s_%s", pathStr, method))
 	}
 
-	// Add document title suffix if the base name might conflict
-	// This helps distinguish between similar endpoints from different documents
-	if g.shouldAddDocumentSuffix(baseName, docInfo) {
-		docSuffix := g.createDocumentSuffix(docInfo.Title)
-		if docSuffix != "" {
-			baseName = fmt.Sprintf("%s_%s", baseName, docSuffix)
+	pathStr := strings.Join(cleanParts, "_")
+	method := strings.ToLower(endpoint.Method)
+	return g.sanitizeToolName(fmt.Sprintf("%s_%s", pathStr, method))
+}
+
+// abbreviatePathPart abbreviates common path parts to save space
+func (g *ToolGenerator) abbreviatePathPart(part string) string {
+	abbreviations := map[string]string{
+		"forecast":     "fcst",
+		"observations": "obs",
+		"current":      "cur",
+		"historical":   "hist",
+		"location":     "loc",
+		"geocode":      "geo",
+		"notifications": "notif",
+		"intraday":     "intra",
+		"hourly":       "hr",
+		"daily":        "day",
+		"lightning":    "light",
+		"temperature":  "temp",
+		"humidity":     "humid",
+		"pressure":     "press",
+		"precipitation": "precip",
+		"weather":      "wx",
+		"almanac":      "alm",
+		"astronomy":    "astro",
+		"airquality":   "aq",
+		"pollen":       "pol",
+		"tides":        "tide",
+	}
+
+	if abbrev, exists := abbreviations[strings.ToLower(part)]; exists {
+		return abbrev
+	}
+
+	// For other parts, truncate if too long
+	if len(part) > 8 {
+		return part[:8]
+	}
+	return part
+}
+
+// abbreviateToolName intelligently abbreviates a tool name to fit within the length limit
+func (g *ToolGenerator) abbreviateToolName(name string, maxLength int) string {
+	if len(name) <= maxLength {
+		return name
+	}
+
+	// Split by underscores and abbreviate parts
+	parts := strings.Split(name, "_")
+	var abbreviatedParts []string
+	
+	for _, part := range parts {
+		// Try to abbreviate this part
+		abbreviated := g.abbreviatePathPart(part)
+		abbreviatedParts = append(abbreviatedParts, abbreviated)
+	}
+	
+	abbreviated := strings.Join(abbreviatedParts, "_")
+	
+	// If still too long, truncate from the end but preserve important parts
+	if len(abbreviated) > maxLength {
+		// Keep first few parts and method (usually last part)
+		if len(abbreviatedParts) > 2 {
+			firstParts := abbreviatedParts[:len(abbreviatedParts)-1]
+			lastPart := abbreviatedParts[len(abbreviatedParts)-1]
+			
+			// Calculate space for first parts
+			spaceForFirst := maxLength - len(lastPart) - 1 // -1 for underscore
+			
+			firstPartsStr := strings.Join(firstParts, "_")
+			if len(firstPartsStr) > spaceForFirst {
+				firstPartsStr = firstPartsStr[:spaceForFirst]
+				firstPartsStr = strings.TrimSuffix(firstPartsStr, "_")
+			}
+			
+			abbreviated = firstPartsStr + "_" + lastPart
+		} else {
+			// Just truncate
+			abbreviated = abbreviated[:maxLength]
+			abbreviated = strings.TrimSuffix(abbreviated, "_")
 		}
 	}
-
-	// Add version number at the end
-	if docInfo.Version != "" {
-		baseName = fmt.Sprintf("%s_v%s", baseName, docInfo.Version)
-	}
-
-	return baseName
+	
+	return abbreviated
 }
 
 // shouldAddDocumentSuffix determines if we should add a document suffix to avoid conflicts

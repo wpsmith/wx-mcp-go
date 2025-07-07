@@ -1,0 +1,58 @@
+{
+  "family": "swagger-docs-mcp",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR-ACCOUNT:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR-ACCOUNT:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "swagger-docs-sse",
+      "image": "YOUR-ECR-REGISTRY/swagger-docs-mcp:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "WX_MCP_URLS",
+          "value": "https://wx-swagger-docs.s3.us-east-2.amazonaws.com/raw-urls.json"
+        },
+        {
+          "name": "WX_MCP_DEBUG",
+          "value": "false"
+        },
+        {
+          "name": "WX_MCP_LOG_LEVEL",
+          "value": "info"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "WX_MCP_API_KEY",
+          "valueFrom": "arn:aws:ssm:us-east-1:YOUR-ACCOUNT:parameter/swagger-mcp/api-key"
+        }
+      ],
+      "command": ["--sse", "--port=8080"],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/swagger-docs-mcp",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

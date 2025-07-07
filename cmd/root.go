@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"swagger-docs-mcp/pkg/config"
 	"swagger-docs-mcp/pkg/server"
+	"swagger-docs-mcp/pkg/sse"
 	"swagger-docs-mcp/pkg/types"
 	"swagger-docs-mcp/pkg/utils"
 )
@@ -39,15 +40,17 @@ var (
 	ignoreErrors      bool
 	userAgent         string
 	retries           int
+	sseMode           bool
+	port              int
 )
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "swagger-docs-mcp",
-	Short: "A Model Context Protocol server for Swagger/OpenAPI documentation",
-	Long: `swagger-docs-mcp is a TypeScript-based MCP server that dynamically converts 
-Swagger/OpenAPI documentation into executable MCP tools. It serves as a bridge 
-between AI assistants and APIs by automatically generating tools from weather API documentation.`,
+	Short: "A Model Context Protocol and SSE server for Swagger/OpenAPI documentation",
+	Long: `swagger-docs-mcp is a Go-based server that dynamically converts 
+Swagger/OpenAPI documentation into executable tools. It can run as either an MCP server 
+for Claude Desktop or as an SSE (Server-Sent Events) HTTP server for remote deployment.`,
 	RunE: runServer,
 }
 
@@ -95,9 +98,13 @@ func init() {
 	// HTTP configuration
 	rootCmd.Flags().StringVar(&userAgent, "user-agent", "swagger-docs-mcp/1.0.0", "HTTP user agent")
 	rootCmd.Flags().IntVar(&retries, "retries", 3, "number of HTTP retries")
+
+	// Server mode
+	rootCmd.Flags().BoolVar(&sseMode, "sse", false, "run as SSE server instead of MCP server")
+	rootCmd.Flags().IntVar(&port, "port", 8080, "port for SSE server")
 }
 
-// runServer runs the MCP server
+// runServer runs the server in MCP or SSE mode
 func runServer(cmd *cobra.Command, args []string) error {
 	// Create configuration manager
 	configManager := config.NewManager()
@@ -132,7 +139,13 @@ func runServer(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	logger.Info("Starting swagger-docs-mcp server",
+	serverMode := "MCP"
+	if sseMode {
+		serverMode = "SSE"
+	}
+
+	logger.Info("Starting swagger-docs server",
+		zap.String("mode", serverMode),
 		zap.String("name", resolvedConfig.Name),
 		zap.String("version", resolvedConfig.Version),
 		zap.Strings("swaggerPaths", resolvedConfig.SwaggerPaths),
@@ -140,8 +153,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 		zap.Bool("debug", resolvedConfig.Debug),
 	)
 
-	// Create and start the MCP server
-	mcpServer := server.NewMCPServer(resolvedConfig, logger)
+	// Create appropriate server based on mode
+	var serverInstance interface {
+		Start(context.Context) error
+		Stop()
+	}
+
+	if sseMode {
+		serverInstance = sse.NewSSEServer(resolvedConfig, logger)
+	} else {
+		serverInstance = server.NewMCPServer(resolvedConfig, logger)
+	}
 
 	// Set up signal handling
 	ctx, cancel := context.WithCancel(context.Background())
@@ -153,7 +175,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Start server in goroutine
 	serverErr := make(chan error, 1)
 	go func() {
-		serverErr <- mcpServer.Start(ctx)
+		serverErr <- serverInstance.Start(ctx)
 	}()
 
 	// Wait for shutdown signal or server error
@@ -161,7 +183,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	case sig := <-sigChan:
 		logger.Info("Received signal, shutting down...", zap.String("signal", sig.String()))
 		cancel()
-		mcpServer.Stop()
+		serverInstance.Stop()
 	case err := <-serverErr:
 		if err != nil {
 			return fmt.Errorf("server error: %w", err)
@@ -225,6 +247,9 @@ func buildConfigOverrides(cmd *cobra.Command) *types.ResolvedConfig {
 	}
 	if maxTools > 0 {
 		overrides.Server.MaxTools = maxTools
+	}
+	if port > 0 {
+		overrides.Server.Port = port
 	}
 
 	// Swagger processing
