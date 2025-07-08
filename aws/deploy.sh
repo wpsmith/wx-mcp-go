@@ -159,7 +159,7 @@ deploy_stack() {
         --capabilities CAPABILITY_NAMED_IAM \
         --tags \
             Project=Wx_API_MCP \
-            Environment=Production \
+            Environment=Development \
             Application=SwaggerDocsMCP \
             Owner=WeatherAPI \
         --region ${REGION}
