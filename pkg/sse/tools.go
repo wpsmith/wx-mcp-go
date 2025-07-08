@@ -106,6 +106,53 @@ func (s *SSEServer) initializeTools(ctx context.Context) error {
 			}
 		}
 
+		// Generate and register prompts
+		if s.config.Prompts.Enabled {
+			prompts, err := s.promptGenerator.GeneratePromptsFromDocument(parsedDoc, &docInfo)
+			if err != nil {
+				s.logger.Error("Failed to generate prompts from document",
+					zap.Error(err),
+					zap.String("filePath", docInfo.FilePath),
+					zap.String("title", docInfo.Title))
+			} else {
+				for _, prompt := range prompts {
+					if err := s.promptRegistry.RegisterPrompt(prompt); err != nil {
+						s.logger.Error("Failed to register prompt",
+							zap.Error(err),
+							zap.String("promptName", prompt.Name))
+					} else {
+						s.logger.Debug("Successfully registered prompt",
+							zap.String("promptName", prompt.Name),
+							zap.String("category", string(prompt.Category)))
+					}
+				}
+			}
+		}
+
+		// Generate and register resources
+		if s.config.Resources.Enabled {
+			resources, err := s.resourceGenerator.GenerateResourcesFromDocument(parsedDoc, &docInfo)
+			if err != nil {
+				s.logger.Error("Failed to generate resources from document",
+					zap.Error(err),
+					zap.String("filePath", docInfo.FilePath),
+					zap.String("title", docInfo.Title))
+			} else {
+				for _, resource := range resources {
+					if err := s.resourceRegistry.RegisterResource(resource); err != nil {
+						s.logger.Error("Failed to register resource",
+							zap.Error(err),
+							zap.String("resourceName", resource.Name))
+					} else {
+						s.logger.Debug("Successfully registered resource",
+							zap.String("resourceName", resource.Name),
+							zap.String("category", string(resource.Category)),
+							zap.String("uri", resource.URI))
+					}
+				}
+			}
+		}
+
 		// Check max tools limit
 		if s.config.Server.MaxTools > 0 && toolCount >= s.config.Server.MaxTools {
 			s.logger.Warn("Reached maximum tool limit, stopping tool generation", zap.Int("maxTools", s.config.Server.MaxTools))
@@ -113,10 +160,12 @@ func (s *SSEServer) initializeTools(ctx context.Context) error {
 		}
 	}
 
-	s.logger.Info("Tool initialization complete",
+	s.logger.Info("Initialization complete",
 		zap.Int("documentsProcessed", len(documents)),
 		zap.Int("toolsGenerated", toolCount),
-		zap.Int("toolsRegistered", s.toolRegistry.GetToolCount()))
+		zap.Int("toolsRegistered", s.toolRegistry.GetToolCount()),
+		zap.Int("promptsRegistered", s.promptRegistry.GetPromptCount()),
+		zap.Int("resourcesRegistered", s.resourceRegistry.GetResourceCount()))
 
 	return nil
 }

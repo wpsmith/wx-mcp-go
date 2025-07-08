@@ -512,6 +512,15 @@ var configCmd = &cobra.Command{
 		fmt.Printf("    Retries: %d\n", resolvedConfig.HTTP.Retries)
 		fmt.Printf("    User Agent: %s\n", resolvedConfig.HTTP.UserAgent)
 
+		fmt.Printf("  Tool Generation:\n")
+		fmt.Printf("    Include Deprecated: %t\n", resolvedConfig.ToolGeneration.IncludeDeprecated)
+		if len(resolvedConfig.ToolGeneration.IgnoreFormats) > 0 {
+			fmt.Printf("    Ignore Formats: %s\n", strings.Join(resolvedConfig.ToolGeneration.IgnoreFormats, ", "))
+		}
+		if resolvedConfig.ToolGeneration.PreferFormat != "" {
+			fmt.Printf("    Prefer Format: %s\n", resolvedConfig.ToolGeneration.PreferFormat)
+		}
+
 		return nil
 	},
 }

@@ -437,6 +437,26 @@ func (m *Manager) mergeOverrides(base *types.ResolvedConfig, override *types.Res
 	}
 	base.Logging.Enabled = override.Logging.Enabled
 
+	// Tool Generation configuration
+	if override.ToolGeneration.IncludeDeprecated {
+		base.ToolGeneration.IncludeDeprecated = override.ToolGeneration.IncludeDeprecated
+	}
+	if override.ToolGeneration.MaxDescriptionLength > 0 {
+		base.ToolGeneration.MaxDescriptionLength = override.ToolGeneration.MaxDescriptionLength
+	}
+	if override.ToolGeneration.UseOperationID {
+		base.ToolGeneration.UseOperationID = override.ToolGeneration.UseOperationID
+	}
+	if override.ToolGeneration.TagPrefix != "" {
+		base.ToolGeneration.TagPrefix = override.ToolGeneration.TagPrefix
+	}
+	if len(override.ToolGeneration.IgnoreFormats) > 0 {
+		base.ToolGeneration.IgnoreFormats = override.ToolGeneration.IgnoreFormats
+	}
+	if override.ToolGeneration.PreferFormat != "" {
+		base.ToolGeneration.PreferFormat = override.ToolGeneration.PreferFormat
+	}
+
 	return base
 }
 

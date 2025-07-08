@@ -154,6 +154,8 @@ func DefaultConfig() *ResolvedConfig {
 			IncludeDeprecated:    false,
 			MaxDescriptionLength: 500,
 			UseOperationID:       true,
+			IgnoreFormats:        []string{},
+			PreferFormat:         "",
 		},
 		SwaggerProcessing: SwaggerProcessingConfig{
 			ValidateDocuments: false,

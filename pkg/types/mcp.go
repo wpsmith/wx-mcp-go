@@ -182,3 +182,97 @@ type GeneratedTool struct {
 	Endpoint     *SwaggerEndpoint       `json:"endpoint"`
 	DocumentInfo *SwaggerDocumentInfo   `json:"documentInfo"`
 }
+
+// GeneratedPrompt represents a prompt generated from Swagger documentation
+type GeneratedPrompt struct {
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
+	Arguments   []MCPPromptArgument      `json:"arguments,omitempty"`
+	Category    WeatherPromptCategory    `json:"category,omitempty"`
+	Template    string                   `json:"template"`
+	Examples    []PromptExample          `json:"examples,omitempty"`
+	Tags        []string                 `json:"tags,omitempty"`
+	Source      *SwaggerDocumentInfo     `json:"source,omitempty"`
+}
+
+// PromptExample represents a prompt usage example
+type PromptExample struct {
+	Description string                 `json:"description"`
+	Arguments   map[string]interface{} `json:"arguments"`
+	ExpectedOutput string              `json:"expectedOutput,omitempty"`
+}
+
+// GeneratedResource represents a resource generated from Swagger documentation
+type GeneratedResource struct {
+	URI         string               `json:"uri"`
+	Name        string               `json:"name"`
+	Description string               `json:"description"`
+	MimeType    string               `json:"mimeType"`
+	Category    ResourceCategory     `json:"category,omitempty"`
+	Tags        []string             `json:"tags,omitempty"`
+	Source      *SwaggerDocumentInfo `json:"source,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// ResourceCategory represents different categories of resources
+type ResourceCategory string
+
+const (
+	ResourceCategoryDocumentation ResourceCategory = "documentation"
+	ResourceCategorySchema       ResourceCategory = "schema"
+	ResourceCategoryExample      ResourceCategory = "example"
+	ResourceCategoryReference    ResourceCategory = "reference"
+	ResourceCategoryEndpoint     ResourceCategory = "endpoint"
+)
+
+// MCPPromptGetParams represents parameters for getting a prompt
+type MCPPromptGetParams struct {
+	Name      string                 `json:"name"`
+	Arguments map[string]interface{} `json:"arguments,omitempty"`
+}
+
+// MCPPromptGetResult represents the result of getting a prompt
+type MCPPromptGetResult struct {
+	Description string             `json:"description"`
+	Messages    []MCPPromptMessage `json:"messages"`
+}
+
+// MCPPromptMessage represents a message in a prompt response
+type MCPPromptMessage struct {
+	Role    string           `json:"role"`
+	Content MCPPromptContent `json:"content"`
+}
+
+// MCPPromptContent represents content in a prompt message
+type MCPPromptContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// MCPListPromptsResult represents the result of listing prompts
+type MCPListPromptsResult struct {
+	Prompts []MCPPrompt `json:"prompts"`
+}
+
+// MCPListResourcesResult represents the result of listing resources
+type MCPListResourcesResult struct {
+	Resources []MCPResource `json:"resources"`
+}
+
+// MCPReadResourceParams represents parameters for reading a resource
+type MCPReadResourceParams struct {
+	URI string `json:"uri"`
+}
+
+// MCPReadResourceResult represents the result of reading a resource
+type MCPReadResourceResult struct {
+	Contents []MCPResourceContent `json:"contents"`
+}
+
+// MCPResourceContent represents the content of a resource
+type MCPResourceContent struct {
+	URI      string `json:"uri"`
+	MimeType string `json:"mimeType"`
+	Text     string `json:"text,omitempty"`
+	Blob     string `json:"blob,omitempty"` // base64 encoded
+}

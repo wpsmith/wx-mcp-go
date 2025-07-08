@@ -18,18 +18,22 @@ import (
 
 // SSEServer implements Server-Sent Events for Swagger tools
 type SSEServer struct {
-	config       *types.ResolvedConfig
-	logger       *utils.Logger
-	scanner      *swagger.Scanner
-	parser       *swagger.Parser
-	generator    *swagger.ToolGenerator
-	toolRegistry *server.ToolRegistry
-	httpClient   *httpclient.Client
-	server       *http.Server
-	clients      map[string]*SSEClient
-	clientsMutex sync.RWMutex
-	shutdown     chan struct{}
-	wg           sync.WaitGroup
+	config            *types.ResolvedConfig
+	logger            *utils.Logger
+	scanner           *swagger.Scanner
+	parser            *swagger.Parser
+	generator         *swagger.ToolGenerator
+	promptGenerator   *swagger.PromptGenerator
+	resourceGenerator *swagger.ResourceGenerator
+	toolRegistry      *server.ToolRegistry
+	promptRegistry    *server.PromptRegistry
+	resourceRegistry  *server.ResourceRegistry
+	httpClient        *httpclient.Client
+	server            *http.Server
+	clients           map[string]*SSEClient
+	clientsMutex      sync.RWMutex
+	shutdown          chan struct{}
+	wg                sync.WaitGroup
 }
 
 // SSEClient represents a connected SSE client
@@ -74,19 +78,27 @@ func NewSSEServer(config *types.ResolvedConfig, logger *utils.Logger) *SSEServer
 	scanner := swagger.NewScanner(logger)
 	parser := swagger.NewParser(logger)
 	generator := swagger.NewToolGeneratorWithConfig(logger, &config.ToolGeneration)
+	promptGenerator := swagger.NewPromptGenerator(logger, &config.Prompts)
+	resourceGenerator := swagger.NewResourceGenerator(logger, &config.Resources)
 	toolRegistry := server.NewToolRegistry()
+	promptRegistry := server.NewPromptRegistry()
+	resourceRegistry := server.NewResourceRegistry()
 	httpClient := httpclient.NewClient(config, logger)
 
 	return &SSEServer{
-		config:       config,
-		logger:       logger.Child("sse-server"),
-		scanner:      scanner,
-		parser:       parser,
-		generator:    generator,
-		toolRegistry: toolRegistry,
-		httpClient:   httpClient,
-		clients:      make(map[string]*SSEClient),
-		shutdown:     make(chan struct{}),
+		config:            config,
+		logger:            logger.Child("sse-server"),
+		scanner:           scanner,
+		parser:            parser,
+		generator:         generator,
+		promptGenerator:   promptGenerator,
+		resourceGenerator: resourceGenerator,
+		toolRegistry:      toolRegistry,
+		promptRegistry:    promptRegistry,
+		resourceRegistry:  resourceRegistry,
+		httpClient:        httpClient,
+		clients:           make(map[string]*SSEClient),
+		shutdown:          make(chan struct{}),
 	}
 }
 
@@ -180,8 +192,11 @@ func (s *SSEServer) stop() error {
 
 // setupRoutes sets up HTTP routes
 func (s *SSEServer) setupRoutes(router *mux.Router) {
-	// Health check
+	// Health check endpoints
 	router.HandleFunc("/health", s.handleHealth).Methods("GET")
+	router.HandleFunc("/healthz", s.handleHealth).Methods("GET")
+	router.HandleFunc("/ready", s.handleHealth).Methods("GET")
+	router.HandleFunc("/readyz", s.handleHealth).Methods("GET")
 	
 	// SSE endpoints
 	router.HandleFunc("/events", s.handleSSE).Methods("GET")
@@ -190,11 +205,23 @@ func (s *SSEServer) setupRoutes(router *mux.Router) {
 	router.HandleFunc("/tools", s.handleListTools).Methods("GET")
 	router.HandleFunc("/tools/{name}/execute", s.handleExecuteTool).Methods("POST")
 	
+	// Prompt management
+	router.HandleFunc("/prompts", s.handleListPrompts).Methods("GET")
+	router.HandleFunc("/prompts/{name}", s.handleGetPrompt).Methods("GET", "POST")
+	
+	// Resource management
+	router.HandleFunc("/resources", s.handleListResources).Methods("GET")
+	router.HandleFunc("/resources/read", s.handleReadResource).Methods("POST")
+	
 	// Configuration
 	router.HandleFunc("/config", s.handleGetConfig).Methods("GET")
 	
 	// Version information
 	router.HandleFunc("/version", s.handleGetVersion).Methods("GET")
+	
+	// Root endpoint (must be last to avoid conflicts)
+	router.HandleFunc("/", s.handleRoot).Methods("GET")
+	router.HandleFunc("/mcp", s.handleRoot).Methods("GET")
 }
 
 // addMiddleware adds middleware to the router

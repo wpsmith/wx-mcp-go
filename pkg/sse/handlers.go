@@ -15,6 +15,13 @@ import (
 	"swagger-docs-mcp/pkg/version"
 )
 
+// handleRoot handles requests to the root path
+func (s *SSEServer) handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("{}"))
+}
+
 // handleHealth handles health check requests
 func (s *SSEServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -503,4 +510,212 @@ func (s *SSEServer) handleGetVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	json.NewEncoder(w).Encode(response)
+}
+
+// handleListPrompts handles GET /prompts requests
+func (s *SSEServer) handleListPrompts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Get prompts from prompt registry
+	prompts := s.promptRegistry.GetAllPrompts()
+	
+	// Convert to MCP format
+	mcpPrompts := make([]types.MCPPrompt, len(prompts))
+	for i, prompt := range prompts {
+		mcpPrompts[i] = types.MCPPrompt{
+			Name:        prompt.Name,
+			Description: prompt.Description,
+			Arguments:   prompt.Arguments,
+		}
+	}
+
+	result := types.MCPListPromptsResult{
+		Prompts: mcpPrompts,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleGetPrompt handles GET /prompts/{name} requests
+func (s *SSEServer) handleGetPrompt(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	promptName := vars["name"]
+
+	w.Header().Set("Content-Type", "application/json")
+
+	// Get the prompt
+	prompt := s.promptRegistry.GetPrompt(promptName)
+	if prompt == nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Prompt not found",
+			"code":  404,
+		})
+		return
+	}
+
+	// Parse request body for arguments
+	var request types.MCPPromptGetParams
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			// If no body or invalid JSON, create empty request
+			request = types.MCPPromptGetParams{
+				Name:      promptName,
+				Arguments: make(map[string]interface{}),
+			}
+		}
+	}
+
+	// Generate prompt content
+	result, err := s.generatePromptContent(prompt, request.Arguments)
+	if err != nil {
+		s.logger.Error("Failed to generate prompt content", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("Error generating prompt: %s", err.Error()),
+			"code":  500,
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleListResources handles GET /resources requests
+func (s *SSEServer) handleListResources(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Get resources from resource registry
+	resources := s.resourceRegistry.GetAllResources()
+	
+	// Convert to MCP format
+	mcpResources := make([]types.MCPResource, len(resources))
+	for i, resource := range resources {
+		mcpResources[i] = types.MCPResource{
+			URI:         resource.URI,
+			Name:        resource.Name,
+			Description: resource.Description,
+			MimeType:    resource.MimeType,
+		}
+	}
+
+	result := types.MCPListResourcesResult{
+		Resources: mcpResources,
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// handleReadResource handles GET /resources/read requests
+func (s *SSEServer) handleReadResource(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	// Parse request body
+	var request types.MCPReadResourceParams
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Invalid request body",
+			"code":  400,
+		})
+		return
+	}
+
+	// Get the resource
+	resource := s.resourceRegistry.GetResourceByURI(request.URI)
+	if resource == nil {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "Resource not found",
+			"code":  404,
+		})
+		return
+	}
+
+	// Generate resource content
+	content, err := s.generateResourceContent(resource)
+	if err != nil {
+		s.logger.Error("Failed to generate resource content", zap.Error(err))
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": fmt.Sprintf("Error reading resource: %s", err.Error()),
+			"code":  500,
+		})
+		return
+	}
+
+	result := types.MCPReadResourceResult{
+		Contents: []types.MCPResourceContent{
+			{
+				URI:      resource.URI,
+				MimeType: resource.MimeType,
+				Text:     content,
+			},
+		},
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(result)
+}
+
+// generatePromptContent generates the actual content for a prompt
+func (s *SSEServer) generatePromptContent(prompt *types.GeneratedPrompt, arguments map[string]interface{}) (types.MCPPromptGetResult, error) {
+	// Process the template with arguments
+	processedTemplate := s.processPromptTemplate(prompt.Template, arguments)
+	
+	// Create the result
+	result := types.MCPPromptGetResult{
+		Description: prompt.Description,
+		Messages: []types.MCPPromptMessage{
+			{
+				Role: "user",
+				Content: types.MCPPromptContent{
+					Type: "text",
+					Text: processedTemplate,
+				},
+			},
+		},
+	}
+
+	return result, nil
+}
+
+// processPromptTemplate processes a prompt template with arguments
+func (s *SSEServer) processPromptTemplate(template string, arguments map[string]interface{}) string {
+	result := template
+	
+	// Simple template processing - replace {{arg}} with argument values
+	for key, value := range arguments {
+		placeholder := fmt.Sprintf("{{%s}}", key)
+		if valueStr, ok := value.(string); ok {
+			result = strings.ReplaceAll(result, placeholder, valueStr)
+		} else {
+			// Convert to string representation
+			result = strings.ReplaceAll(result, placeholder, fmt.Sprintf("%v", value))
+		}
+	}
+	
+	return result
+}
+
+// generateResourceContent generates the actual content for a resource
+func (s *SSEServer) generateResourceContent(resource *types.GeneratedResource) (string, error) {
+	// Get the parsed document for this resource
+	doc := s.getDocumentForResource(resource)
+	if doc == nil {
+		return "", fmt.Errorf("document not found for resource")
+	}
+
+	// Use the resource generator to get content
+	return s.resourceGenerator.GetResourceContent(resource, doc)
+}
+
+// getDocumentForResource gets the parsed document for a resource
+func (s *SSEServer) getDocumentForResource(resource *types.GeneratedResource) *types.SwaggerDocument {
+	// This would need to be implemented based on how documents are stored
+	// For now, return nil to indicate document not found
+	return nil
 }
