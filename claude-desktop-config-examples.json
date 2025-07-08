@@ -140,6 +140,68 @@
           }
         }
       }
+    },
+
+    "with-remote-swagger-urls": {
+      "description": "Configuration using remote swagger document URLs",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "docker",
+            "args": [
+              "run",
+              "--rm",
+              "-i",
+              "--name", "swagger-mcp-server",
+              "--env", "WX_MCP_URLS=https://wx-swagger-docs.s3.us-east-2.amazonaws.com/raw-urls-sample.json",
+              "--env", "WX_MCP_API_KEY=your-api-key-here",
+              "--env", "WX_MCP_DEBUG=true",
+              "--env", "WX_MCP_LOG_LEVEL=debug",
+              "swagger-docs-mcp:latest"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    },
+
+    "binary-direct": {
+      "description": "Direct binary execution with remote swagger URLs",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp": {
+            "command": "/path/to/wx-mcp-go/swagger-docs-mcp",
+            "args": [
+              "--swagger-url", "https://wx-swagger-docs.s3.us-east-2.amazonaws.com/raw-urls-sample.json",
+              "--api-key", "your-api-key-here",
+              "--debug"
+            ],
+            "cwd": "/path/to/wx-mcp-go"
+          }
+        }
+      }
+    },
+
+    "remote-mcp-proxy": {
+      "description": "Remote MCP proxy connecting to SSE server deployed on AWS",
+      "config": {
+        "mcpServers": {
+          "swagger-docs-mcp-proxy": {
+            "command": "node",
+            "args": ["/path/to/wx-mcp-go/examples/mcp-proxy.js", "http://your-alb-url.elb.amazonaws.com"],
+            "cwd": "/path/to/wx-mcp-go",
+            "env": {
+              "WX_MCP_API_KEY": "your-weather-api-key-here",
+              "WX_MCP_PACKAGE_ID": "premium-weather,alerts",
+              "WX_MCP_TWC_DOMAIN": "weather.com",
+              "WX_MCP_TWC_PORTFOLIO": "consumer",
+              "WX_MCP_TWC_GEOGRAPHY": "us,ca",
+              "WX_MCP_FILTER_CUSTOM_FIELD": "premium:true",
+              "WX_MCP_DEBUG": "true"
+            }
+          }
+        }
+      }
     }
   },
   

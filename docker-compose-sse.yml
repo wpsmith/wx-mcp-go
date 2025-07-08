@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  swagger-docs-sse:
+    build: .
+    container_name: swagger-docs-sse
+    ports:
+      - "8080:8080"
+    environment:
+      # Server configuration
+      - WX_MCP_DEBUG=true
+      - WX_MCP_LOG_LEVEL=info
+      
+      # Swagger document sources (customize as needed)
+      # - WX_MCP_PATHS=/app/swagger_docs
+      # - WX_MCP_URLS=https://example.com/swagger.json
+      
+      # Authentication (set your API key)
+      # - WX_MCP_API_KEY=your-api-key-here
+      
+      # Filtering options
+      # - WX_MCP_PACKAGE_ID=weather-alerts,current-conditions
+      # - WX_MCP_TWC_DOMAIN=weather
+      
+      # Server limits
+      - WX_MCP_MAX_TOOLS=1000
+    volumes:
+      # Mount swagger documents if using local files
+      # - ./swagger_docs:/app/swagger_docs:ro
+      # - ./documentation:/app/documentation:ro
+    command: ["--sse", "--port=8080", "--debug"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Add nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: swagger-docs-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./examples:/usr/share/nginx/html/examples:ro
+    depends_on:
+      - swagger-docs-sse
+    restart: unless-stopped
+    profiles:
+      - production

@@ -52,6 +52,7 @@ type SwaggerEndpoint struct {
 	Responses   map[string]interface{} `json:"responses,omitempty"`
 	Security    []interface{}          `json:"security,omitempty"`
 	Deprecated  bool                   `json:"deprecated,omitempty"`
+	MCPToolName string                 `json:"x-mcp-tool-name,omitempty"`
 }
 
 // SwaggerParameter represents a swagger parameter

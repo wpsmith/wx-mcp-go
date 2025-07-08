@@ -4,9 +4,23 @@
 
 # Build variables
 BINARY_NAME=swagger-docs-mcp
-VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+MAJOR=1
+MINOR=0
+PATCH=0
+PRERELEASE=
+COMMIT_COUNT=$(shell git rev-list --count HEAD 2>/dev/null || echo "0")
 BUILD_TIME=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-LDFLAGS=-ldflags "-s -w -X main.version=$(VERSION) -X main.buildTime=$(BUILD_TIME)"
+COMMIT_HASH=$(shell git rev-parse HEAD 2>/dev/null || echo "unknown")
+BUILD_USER=$(shell whoami 2>/dev/null || echo "unknown")
+LDFLAGS=-ldflags "-s -w \
+	-X swagger-docs-mcp/pkg/version.Major=$(MAJOR) \
+	-X swagger-docs-mcp/pkg/version.Minor=$(COMMIT_COUNT) \
+	-X swagger-docs-mcp/pkg/version.Patch=$(PATCH) \
+	-X swagger-docs-mcp/pkg/version.PreRelease=$(PRERELEASE) \
+	-X swagger-docs-mcp/pkg/version.CommitCount=$(COMMIT_COUNT) \
+	-X swagger-docs-mcp/pkg/version.BuildDate=$(BUILD_TIME) \
+	-X swagger-docs-mcp/pkg/version.CommitHash=$(COMMIT_HASH) \
+	-X swagger-docs-mcp/pkg/version.BuildUser=$(BUILD_USER)"
 
 # Default target
 all: check build
@@ -65,8 +79,8 @@ install: build ## Install the binary to GOPATH/bin
 
 ##@ Docker
 
-docker-build: ## Build Docker image
-	./docker-build.sh
+docker-build: ## Build Docker image with version information
+	./aws/deploy.sh build
 
 docker-run: ## Run in Docker container
 	./docker-run.sh
@@ -92,6 +106,23 @@ docker-shell: ## Access container shell
 docker-clean: ## Clean up Docker resources
 	docker system prune -f
 	docker image prune -f
+
+##@ AWS Deployment
+
+aws-ecr: ## Create AWS ECR repository
+	./aws/deploy.sh ecr
+
+aws-build: ## Build and push Docker image to AWS ECR
+	./aws/deploy.sh build
+
+aws-stack: ## Deploy CloudFormation stack
+	./aws/deploy.sh stack
+
+aws-lambda: ## Deploy Lambda MCP proxy
+	./aws/deploy.sh lambda
+
+aws-deploy: ## Full AWS deployment (all steps)
+	./aws/deploy.sh all
 
 ##@ Utilities
 
